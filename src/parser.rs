@@ -1,19 +1,14 @@
 #[derive(Debug)]
-pub enum Literal {
-    Bool(bool),
-    Int(u32)
-}
-
-#[derive(Debug)]
 pub enum Expr {
     Var(String),
     App(Box<Expr>, Box<Expr>),
     Lam(String, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
-    Lit(Literal),
+    Lit,
     If(Box<Expr>, Box<Expr>, Box<Expr>)
 }
 
+// TODO: handle integer and boolean literals
 named!(pub expression(&str) -> Expr, alt!(
         let_expr | if_expr | lambda_expr | var_expr | app_expr
     )
@@ -50,6 +45,7 @@ named!(pub if_expr(&str) -> Expr, do_parse!(
 );
 
 named!(pub lambda_expr(&str) -> Expr, do_parse!(
+        eat_separator!(" \r\t\n") >>
         tag!(r#"\"#) >>
         name: take_until_and_consume!(".") >>
         expr: expression >>
@@ -64,7 +60,7 @@ named!(pub var_expr(&str) -> Expr, do_parse!(
     )
  );
 
- named!(pub app_expr(&str) -> Expr, do_parse!(
+named!(pub app_expr(&str) -> Expr, do_parse!(
          eat_separator!(" \r\t\n") >>
          expr1: expression >>
          eat_separator!(" \r\t\n") >>

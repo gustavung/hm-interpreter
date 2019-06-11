@@ -1,1 +1,11 @@
-\x. \y. if x then y else false
+let and = \x:bool. \y:bool. if x then y else false in
+let not = \x:bool. if x then false else true in
+
+let iszero = \x:int. and (x < 1) (not (x < 0)) in
+
+let equals = \x:int. \y:int. iszero (x + -y) in
+
+letrec plus5:int->int = \x:int. if iszero x then 5 else plus5 (x + -1) + 1 in
+//let plus5 = fix (\plus5:int->int. \x:int. if iszero x then 5 else plus5 (x + -1) + 1) in
+
+plus5 22

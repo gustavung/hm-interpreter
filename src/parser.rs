@@ -1,4 +1,4 @@
-use nom::{digit1, multispace0, multispace1};
+use nom::{digit1, multispace0, multispace1, alphanumeric1};
 
 #[derive(Debug)]
 pub enum Expr {
@@ -9,12 +9,22 @@ pub enum Expr {
     LetRec(String, Box<Expr>, Box<Expr>),
     BoolLit(bool),
     IntLit(i32),
-    Comp(String),
+    MinLit(Box<Expr>),
+    Add(Box<Expr>, Box<Expr>),
+    Comp(Box<Expr>, Box<Expr>),
     If(Box<Expr>, Box<Expr>, Box<Expr>)
 }
 
+named!(pub expression(&str) -> Expr, alt!(call!(paren_expr) | call!(expr)));
+
+/*
 named!(expr(&str) -> Expr, alt!(
-        let_expr | letrec_expr | if_expr | lambda_expr | comp_expr | bool_expr | int_expr | var_expr | app_expr
+        let_expr | letrec_expr | if_expr | lambda_expr | bool_expr | comp_expr | int_expr | var_expr | app_expr
+    )
+);*/
+
+named!(expr(&str) -> Expr, alt!(
+        let_expr | letrec_expr | if_expr | lambda_expr | bool_expr | app_expr | int_expr
     )
 );
 
@@ -26,73 +36,50 @@ named!(paren_expr(&str) -> Expr, do_parse!(
     )
 );
 
-named!(pub expression(&str) -> Expr, alt!(call!(paren_expr) | call!(expr)));
-
-
-
 named!(pub let_expr(&str) -> Expr, do_parse!(
-        multispace0
-        >> tag!("let")
-        >> multispace1
-        >> name: take_until_and_consume!(" ")
-        >> multispace0
-        >> tag!("=")
-        >> multispace0
+        ws!(tag!("let"))
+        >> name: ws!(map!(alphanumeric1, |t| t.to_string()))
+        >> ws!(tag!("="))
         >> expr1: expression
-        >> multispace1
-        >> tag!("in")
-        >> multispace0
+        >> ws!(tag!("in"))
         >> expr2: expression
         >> ( Expr::Let(name.to_string(), Box::new(expr1), Box::new(expr2)) )
     )
 );
 
 named!(pub letrec_expr(&str) -> Expr, do_parse!(
-        multispace0
-        >> tag!("letrec")
-        >> multispace1
-        >> name: take_until_and_consume!(" ")
-        >> multispace0
-        >> tag!("=")
-        >> multispace0
+        ws!(tag!("letrec"))
+        >> name: ws!(map!(alphanumeric1, |t| t.to_string()))
+        >> ws!(tag!("="))
         >> expr1: expression
-        >> multispace1
-        >> tag!("in")
-        >> multispace0
+        >> ws!(tag!("in"))
         >> expr2: expression
         >> ( Expr::Let(name.to_string(), Box::new(expr1), Box::new(expr2)) )
     )
 );
 
 named!(pub if_expr(&str) -> Expr, do_parse!(
-        multispace0
-        >> tag!("if")
-        >> multispace1
+        ws!(tag!("if"))
         >> expr1: expression
-        >> multispace1
-        >> tag!("then")
-        >> multispace1
+        >> ws!(tag!("then"))
         >> expr2: expression
-        >> multispace1
-        >> tag!("else")
-        >> multispace1
+        >> ws!(tag!("else"))
         >> expr3: expression
         >> ( Expr::If(Box::new(expr1), Box::new(expr2), Box::new(expr3)) )
     )
 );
 
 named!(pub lambda_expr(&str) -> Expr, do_parse!(
-        multispace0
-        >> tag!(r#"\"#)
-        >> name: take_until_and_consume!(".")
+        tag!(r#"\"#)
+        >> name: map!(alphanumeric1, |t| t.to_string())
+        >> terminated!(tag!("."), multispace1)
         >> expr: expression
         >> ( Expr::Lam(name.to_string(), Box::new(expr)) )
     )
 );
 
 named!(pub var_expr(&str) -> Expr, do_parse!(
-        multispace0
-        >> name: take_until_either_and_consume!(" \r\t\n")
+        name: map!(alphanumeric1, |t| t.to_string())
         >> ( Expr::Var(name.to_string()) )
     )
  );
@@ -107,23 +94,37 @@ named!(pub app_expr(&str) -> Expr, do_parse!(
 );
 
 named!(pub bool_expr(&str) -> Expr, do_parse!(
-        eat_separator!(" \r\t\n") >>
-        b: alt!(tag!("true") => { |_| true } |
-                tag!("false") => { |_| false } ) >>
-        ( Expr::BoolLit(b) )
+        b: ws!(alt!(tag!("true") => { |_| true } |
+                tag!("false") => { |_| false } ))
+        >> ( Expr::BoolLit(b) )
     )
 );
 
 named!(pub int_expr(&str) -> Expr, do_parse!(
-        eat_separator!(" \r\t\n") >>
-        i: map_res!(digit1, |integer: &str| integer.parse::<i32>())>>
-        ( Expr::IntLit(i) )
+        i: ws!(map_res!(digit1, |integer: &str| integer.parse::<i32>()))
+        >> ( Expr::IntLit(i) )
     )
 );
 
 named!(pub comp_expr(&str) -> Expr, do_parse!(
-        multispace0
-        >> b: alt!(tag!(">") | tag!("<"))
-        >> ( Expr::Comp(b.to_string()) )
+        e1 : expression
+        >> ws!(tag!("<"))
+        >> e2 : expression
+        >> ( Expr::Comp(Box::new(e1), Box::new(e2)) )
+    )
+);
+
+named!(pub add_expr(&str) -> Expr, do_parse!(
+        e1 : int_expr
+        >> ws!(tag!("+"))
+        >> e2 : int_expr
+        >> ( Expr::Add(Box::new(e1), Box::new(e2)) )
+    )
+);
+
+named!(pub min_expr(&str) -> Expr, do_parse!(
+        ws!(tag!("-"))
+        >> e1 : int_expr
+        >> ( Expr::MinLit(Box::new(e1)) )
     )
 );

@@ -15,16 +15,24 @@ pub enum Expr {
     If(Box<Expr>, Box<Expr>, Box<Expr>)
 }
 
-named!(pub expression(&str) -> Expr, alt!(call!(paren_expr) | call!(expr)));
+use crate::NOM_TRACE;
 
-/*
-named!(expr(&str) -> Expr, alt!(
-        let_expr | letrec_expr | if_expr | lambda_expr | bool_expr | comp_expr | int_expr | var_expr | app_expr
-    )
-);*/
+named!(keywords, alt!(
+    tag!("let")
+    | tag!("letrec")
+    | tag!("if")
+    | tag!("then")
+    | tag!("else")))
+
+named!(pub expression(&str) -> Expr, tr!(alt!(call!(paren_expr) | call!(expr))));
 
 named!(expr(&str) -> Expr, alt!(
-        let_expr | letrec_expr | if_expr | lambda_expr | bool_expr | app_expr | int_expr
+         let_expr
+         | letrec_expr
+         | if_expr
+         | lambda_expr
+         | app_expr
+         | var_expr
     )
 );
 
@@ -33,6 +41,11 @@ named!(paren_expr(&str) -> Expr, do_parse!(
         >> e: expression
         >> tag!(")")
         >> ( e )
+    )
+);
+
+named!(atom(&str) -> Expr, alt!(
+        bool_expr | int_expr | var_expr | paren_expr
     )
 );
 
@@ -85,11 +98,10 @@ named!(pub var_expr(&str) -> Expr, do_parse!(
  );
 
 named!(pub app_expr(&str) -> Expr, do_parse!(
-        eat_separator!(" \r\t\n") >>
-        expr1: expression >>
-        eat_separator!(" \r\t\n") >>
-        expr2: expression >>
-        ( Expr::App(Box::new(expr1), Box::new(expr2)) )
+        expr1: atom
+        >> eat_separator!(" \r\t\n")
+        >> expr2: atom
+        >> ( Expr::App(Box::new(expr1), Box::new(expr2)) )
     )
 );
 
@@ -107,17 +119,17 @@ named!(pub int_expr(&str) -> Expr, do_parse!(
 );
 
 named!(pub comp_expr(&str) -> Expr, do_parse!(
-        e1 : expression
+        e1 : atom
         >> ws!(tag!("<"))
-        >> e2 : expression
+        >> e2 : atom
         >> ( Expr::Comp(Box::new(e1), Box::new(e2)) )
     )
 );
 
 named!(pub add_expr(&str) -> Expr, do_parse!(
-        e1 : int_expr
+        e1 : atom
         >> ws!(tag!("+"))
-        >> e2 : int_expr
+        >> e2 : atom
         >> ( Expr::Add(Box::new(e1), Box::new(e2)) )
     )
 );

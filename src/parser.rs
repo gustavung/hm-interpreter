@@ -2,7 +2,7 @@ use nom::{digit1, multispace0, multispace1, alphanumeric1};
 
 #[derive(Debug)]
 pub enum Expr {
-    Var(String),
+    Ident(String),
     App(Box<Expr>, Box<Expr>),
     Lam(String, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
@@ -17,22 +17,47 @@ pub enum Expr {
 
 use crate::NOM_TRACE;
 
-named!(keywords, alt!(
-    tag!("let")
+named!(comment(&str) -> &str, preceded!(
+        tag!("//"),
+        take_until!("\n")
+    )
+);
+
+named!(keywords(&str) -> &str, alt!(
+      tag!("let")
     | tag!("letrec")
+    | tag!("in")
+    | tag!("=")
     | tag!("if")
     | tag!("then")
-    | tag!("else")))
+    | tag!("else")));
 
-named!(pub expression(&str) -> Expr, tr!(alt!(call!(paren_expr) | call!(expr))));
+/*
+
+Expression ::= Paren_expr | Expr
+Paren_expr ::= ( + Expression + )
+Expr ::= Let | LetRec | If | Lambda | App | Atom
+Atom ::= Bool | Int | Ident | Paren_expr
+
+Let ::= let Ident = + Expression + in + Expression
+LetRec ::= letrec Ident = + Expression + in + Expression
+If ::= if + Expression + then + Expression + else + Expression
+Lambda ::= \ + Ident + . + Expression
+App ::= Atom Atom
+
+*/
+named!(pub expression(&str) -> Expr, tr!(alt!(call!(expr) | call!(paren_expr))));
+
 
 named!(expr(&str) -> Expr, alt!(
-         let_expr
-         | letrec_expr
-         | if_expr
-         | lambda_expr
-         | app_expr
-         | var_expr
+           complete!(let_expr)
+         | complete!(letrec_expr)
+         | complete!(if_expr)
+         | complete!(lambda_expr)
+         | complete!(comp_expr)
+         | complete!(add_expr)
+         | complete!(app_expr)
+         | complete!(atom)
     )
 );
 
@@ -45,7 +70,11 @@ named!(paren_expr(&str) -> Expr, do_parse!(
 );
 
 named!(atom(&str) -> Expr, alt!(
-        bool_expr | int_expr | var_expr | paren_expr
+        complete!(bool_expr)
+        | complete!(int_expr)
+        | complete!(ident_expr)
+        | complete!(min_expr)
+        | complete!(paren_expr)
     )
 );
 
@@ -91,9 +120,11 @@ named!(pub lambda_expr(&str) -> Expr, do_parse!(
     )
 );
 
-named!(pub var_expr(&str) -> Expr, do_parse!(
+
+named!(pub ident_expr(&str) -> Expr, do_parse!(
+        peek!(not!(keywords)) >>
         name: map!(alphanumeric1, |t| t.to_string())
-        >> ( Expr::Var(name.to_string()) )
+        >> ( Expr::Ident(name.to_string()) )
     )
  );
 
@@ -136,7 +167,7 @@ named!(pub add_expr(&str) -> Expr, do_parse!(
 
 named!(pub min_expr(&str) -> Expr, do_parse!(
         ws!(tag!("-"))
-        >> e1 : int_expr
+        >> e1 : atom
         >> ( Expr::MinLit(Box::new(e1)) )
     )
 );

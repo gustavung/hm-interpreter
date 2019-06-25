@@ -46,8 +46,8 @@ Lambda ::= \ + Ident + . + Expression
 App ::= Atom Atom
 
 */
-named!(pub expression(&str) -> Expr, tr!(alt!(call!(expr) | call!(paren_expr))));
 
+named!(pub expression(&str) -> Expr, alt!(call!(expr) | call!(paren_expr)));
 
 named!(expr(&str) -> Expr, alt!(
            complete!(let_expr)

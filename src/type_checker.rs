@@ -4,21 +4,18 @@ use std::iter::FromIterator;
 
 type Var = String;
 
-#[derive(Debug)]
-enum TypeVar {
-    TypeV(String)
-}
-
+/// A type is defined as a type variable, a type const (eg. bool, int etc) or a arrow type.
 #[derive(Debug, Clone)]
 pub enum Type {
     // type variable
-    TypeV(String),
-    // type constraints
+    TypeV(Var),
+    // type const
     TCon(String),
-    // something
+    // Arrow type
     TArr(Box<Type>, Box<Type>)
 }
 
+/// A type scheme is defined as a list of possible type variables as well as a type.
 enum Scheme {
     Forall(Vec<Var>, Type)
 }
@@ -26,8 +23,11 @@ enum Scheme {
 //let typeInt: Type = Type::TCon(String::from("Int"));
 //let typeBool: Type = Type::TCon(String::from("Bool"));
 
+/// This trait defines what is required to be able to substitute type variables in the implementor.
 trait Substitutable<T> {
+    /// Given a substitution map, apply the substitutions
     fn apply(mut self, sub: &Subst) -> T;
+    /// return the set of free type variables
     fn ftv(mut self) -> BTreeSet<Var>;
 }
 

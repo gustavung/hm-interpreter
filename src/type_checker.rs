@@ -5,6 +5,14 @@ use uuid::Uuid;
 
 use crate::parser::Expr;
 
+
+/**
+ * This code is based on http://dev.stephendiehl.com/fun/006_hindley_milner.html
+ * as well as the following papers:
+ * Generalizing Hindley-Milner Type Inference Algorithms by Heeren et al
+ * Principal type-schemes for functional programs by Luis Damas and Robin Milner
+ **/
+
 type Var = String;
 
 /// A type is defined as a type variable, a type const (eg. bool, int etc) or a arrow type.
@@ -134,14 +142,17 @@ impl Substitutable<TypeEnv> for TypeEnv {
     }
 }
 
+/// A check intended to prevent cyclic type variables and therefore infinite types.
 fn occurs_check<T: Substitutable<T>>(v: Var, t: &mut T) -> bool {
     t.ftv().contains(&v)
 }
 
+/// This function will generate a new, fresh type variable.
 fn fresh_var() -> Type {
     Type::TypeV(Uuid::new_v4().to_hyphenated_string())
 }
 
+/// An implementation of the generalization rule described in the papers above.
 fn generalize(te: &mut TypeEnv, mut t: Type) -> Scheme {
     let free_vars1 = t.ftv();
     let free_vars2 = &te.ftv();
@@ -151,6 +162,7 @@ fn generalize(te: &mut TypeEnv, mut t: Type) -> Scheme {
     Scheme::Forall(vec, t)
 }
 
+/// An implementation of the instantiation rule described in the papers above.
 fn instantiate(s: &mut Scheme) -> Type {
     if let Scheme::Forall(v, t) = s {
         let mut subst = Subst::new();
@@ -162,6 +174,7 @@ fn instantiate(s: &mut Scheme) -> Type {
 }
 
 // TODO: Implement occurschecking below
+/// This function will try to compute a substituation such that ty1 == ty2.apply(subs) is true.
 fn unify(ty1: Type, ty2: Type) -> Subst {
     let mut sub = Subst::new();
     if let Type::TypeV(s) = ty1 {
@@ -179,6 +192,7 @@ fn unify(ty1: Type, ty2: Type) -> Subst {
     sub
 }
 
+/// The main type inference algorithm. It is described as "algorithm W" in the litterature.
 pub fn infer(ty_env: &mut TypeEnv, e: Expr) -> (Subst, Type) {
     match e {
         Expr::Ident(i) => {

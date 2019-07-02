@@ -1,4 +1,4 @@
-use nom::{digit1, multispace0, multispace1, alphanumeric1};
+use nom::character::complete::{digit1, multispace0, multispace1, alphanumeric1};
 
 #[derive(Debug)]
 pub enum Expr {

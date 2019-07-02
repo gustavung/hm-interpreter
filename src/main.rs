@@ -2,6 +2,9 @@
 extern crate nom;
 #[macro_use] extern crate nom_trace;
 
+extern crate uuid;
+
+
 mod parser;
 mod type_checker;
 

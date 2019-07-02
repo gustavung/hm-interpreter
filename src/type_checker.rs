@@ -1,11 +1,11 @@
 use std::collections::{HashMap, BTreeSet};
+use std::iter::FromIterator;
 
 use uuid::Uuid;
 
-use std::iter::FromIterator;
+use crate::parser::Expr;
 
 type Var = String;
-
 
 /// A type is defined as a type variable, a type const (eg. bool, int etc) or a arrow type.
 #[derive(Debug, Clone)]
@@ -24,13 +24,13 @@ enum Scheme {
     Forall(Vec<Var>, Type)
 }
 
-struct TypeEnv(HashMap<Var, Scheme>);
+pub struct TypeEnv(HashMap<Var, Scheme>);
 
 #[derive(Debug, Clone)]
 struct Subst(HashMap<Var, Type>);
 
 impl TypeEnv {
-    fn new() -> TypeEnv {
+    pub fn new() -> TypeEnv {
         TypeEnv {
             0: HashMap::new()
         }
@@ -168,11 +168,19 @@ fn unify(ty1: Type, ty2: Type) -> Subst {
     } else if let Type::TArr(a1, mut a2) = ty1 {
         if let Type::TArr(b1, mut b2) = ty2 {
             sub = unify(*a1, *b1);
-            let mut s2 = unify(a2.apply(&sub), b2.apply(&sub));
-            sub.compose(s2);
+            sub.compose(unify(a2.apply(&sub), b2.apply(&sub)));
         }
     } else {
         // something went wrong
     }
     sub
+}
+
+pub fn infer(ty_env: TypeEnv, e: Expr) {
+    match e {
+        Expr::Ident(i) => {
+            println!("{:?}", i);
+        }
+        _ => {}
+    }
 }

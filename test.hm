@@ -1,10 +1,1 @@
-let and = \x. \y. if x then y else false in
-let not = \x. if x then false else true in
-
-let iszero = \x. (and (x < 1)) (not (x < 0)) in
-
-let equals = \x. \y. iszero (x + -y) in
-
-letrec plus5 = \x. if iszero x then 5 else (plus5 (x + -1)) + 1 in
-
-plus5 22
+(\x. x) 12

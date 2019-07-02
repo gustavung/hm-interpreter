@@ -27,7 +27,7 @@ enum Scheme {
 pub struct TypeEnv(HashMap<Var, Scheme>);
 
 #[derive(Debug, Clone)]
-struct Subst(HashMap<Var, Type>);
+pub struct Subst(HashMap<Var, Type>);
 
 impl TypeEnv {
     pub fn new() -> TypeEnv {
@@ -53,7 +53,7 @@ impl Subst {
     }
 
     fn compose(&mut self, mut m: Subst) {
-        self.0.extend(m.0.drain())
+        self.0.extend(m.0.drain());
     }
 }
 
@@ -72,7 +72,10 @@ impl Substitutable<Type> for Type {
     fn apply(&mut self, sub: &Subst) -> Type {
         match self {
             Type::TCon(s) => Type::TCon(s.to_string()),
-            Type::TypeV(t) => sub.0.get(&t.to_string()).unwrap().clone(),
+            Type::TypeV(t) => match sub.0.get(&t.to_string()) {
+                Some(t_p) => t_p.clone(),
+                None => Type::TypeV(t.to_string())
+            }
             Type::TArr(a1, a2) => Type::TArr(Box::new(a1.apply(&sub)), Box::new(a2.apply(&sub)))
         }
     }
@@ -135,8 +138,8 @@ fn occurs_check<T: Substitutable<T>>(v: Var, t: &mut T) -> bool {
     t.ftv().contains(&v)
 }
 
-fn fresh_var() -> Var {
-    Uuid::new_v4().to_hyphenated_string()
+fn fresh_var() -> Type {
+    Type::TypeV(Uuid::new_v4().to_hyphenated_string())
 }
 
 fn generalize(te: &mut TypeEnv, mut t: Type) -> Scheme {
@@ -148,10 +151,10 @@ fn generalize(te: &mut TypeEnv, mut t: Type) -> Scheme {
     Scheme::Forall(vec, t)
 }
 
-fn instantiate(s: Scheme) -> Type {
-    if let Scheme::Forall(mut v, mut t) = s {
+fn instantiate(s: &mut Scheme) -> Type {
+    if let Scheme::Forall(v, t) = s {
         let mut subst = Subst::new();
-        v.iter().map(|st| subst.0.insert(st.to_string(), Type::TypeV(fresh_var())));
+        v.iter().map(|st| subst.0.insert(st.to_string(), fresh_var()));
         return t.apply(&subst)
     }
     // else error
@@ -162,9 +165,9 @@ fn instantiate(s: Scheme) -> Type {
 fn unify(ty1: Type, ty2: Type) -> Subst {
     let mut sub = Subst::new();
     if let Type::TypeV(s) = ty1 {
-        sub.0.insert(s, ty2).unwrap();
+        sub.0.insert(s, ty2);
     } else if let Type::TypeV(s) = ty2 {
-        sub.0.insert(s, ty1).unwrap();
+        sub.0.insert(s, ty1);
     } else if let Type::TArr(a1, mut a2) = ty1 {
         if let Type::TArr(b1, mut b2) = ty2 {
             sub = unify(*a1, *b1);
@@ -176,11 +179,47 @@ fn unify(ty1: Type, ty2: Type) -> Subst {
     sub
 }
 
-pub fn infer(ty_env: TypeEnv, e: Expr) {
+pub fn infer(ty_env: &mut TypeEnv, e: Expr) -> (Subst, Type) {
     match e {
         Expr::Ident(i) => {
-            println!("{:?}", i);
+            match ty_env.0.get_mut(&i) {
+                Some(sc) => {
+                    let inst = instantiate(sc);
+                    (Subst::new(), inst)
+                }
+                None => {
+                    println!("unbound var");
+                    (Subst::new(), Type::TypeV("err".to_string()))
+                }
+            }
         }
-        _ => {}
+        Expr::Lam(s, e) => {
+            let fresh = fresh_var();
+            ty_env.0.insert(s, Scheme::Forall(Vec::new(), fresh.clone()));
+            let (s1, e1) = infer(ty_env, *e);
+            (s1.clone(), Type::TArr(Box::new(fresh), Box::new(e1)).apply(&s1))
+        }
+        Expr::App(e1, e2) => {
+            let mut tv = fresh_var();
+            let (mut s1, mut t1) = infer(ty_env, *e1);
+            let (mut s2, mut t2) = infer(&mut ty_env.apply(&s1), *e2);
+            let mut s3 = unify(t1.apply(&s2), Type::TArr(Box::new(t2), Box::new(tv.clone())));
+            let mut tv_p = tv.apply(&s3);
+            s2.compose(s3);
+            s1.compose(s2);
+            (s1, tv_p)
+        }
+        Expr::Let(s, e1, e2) => {
+            // TODO: Implement
+            (Subst::new(), Type::TypeV("err".to_string()))
+        }
+        Expr::IntLit(i) => {
+            (Subst::new(), Type::TCon("int".to_string()))
+        }
+        ha => {
+
+            println!("{:?}", ha);
+            (Subst::new(), Type::TypeV("err".to_string()))
+        }
     }
 }

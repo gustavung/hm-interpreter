@@ -32,6 +32,7 @@ enum Scheme {
     Forall(Vec<Var>, Type)
 }
 
+#[derive(Debug, Clone)]
 pub struct TypeEnv(HashMap<Var, Scheme>);
 
 #[derive(Debug, Clone)]
@@ -224,15 +225,20 @@ pub fn infer(ty_env: &mut TypeEnv, e: Expr) -> (Subst, Type) {
             (s1, tv_p)
         }
         Expr::Let(s, e1, e2) => {
-            // TODO: Implement
-            (Subst::new(), Type::TypeV("err".to_string()))
+            let (mut s1, mut t1) = infer(ty_env, *e1);
+            let mut env_p = ty_env.apply(&s1);
+            env_p.0.insert(s, generalize(&mut (env_p.clone()), t1));
+            let (mut s2, mut t2) = infer(&mut env_p, *e2);
+            s1.compose(s2);
+            (s1, t2)
         }
         Expr::IntLit(i) => {
             (Subst::new(), Type::TCon("int".to_string()))
         }
-        ha => {
-
-            println!("{:?}", ha);
+        Expr::BoolLit(b) => {
+            (Subst::new(), Type::TCon("bool".to_string()))
+        }
+        _ => {
             (Subst::new(), Type::TypeV("err".to_string()))
         }
     }

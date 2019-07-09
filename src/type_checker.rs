@@ -46,6 +46,7 @@ impl TypeEnv {
     }
 
     fn extend(mut self, (v, s): (Var, Scheme)) {
+        // makes no sense to unwrap because None is returned when v or s does not exist.
         self.0.insert(v, s).unwrap();
     }
 
@@ -123,7 +124,7 @@ impl Substitutable<Scheme> for Scheme {
     fn ftv(&mut self) -> BTreeSet<Var> {
         match self {
             Scheme::Forall(tv, t) => {
-                let mut set = BTreeSet::new();
+                let set = BTreeSet::new();
                 set.union(&t.ftv());
                 set.difference(&BTreeSet::from_iter(tv.iter().cloned()));
                 set
@@ -157,7 +158,7 @@ fn fresh_var() -> Type {
 fn generalize(te: &mut TypeEnv, mut t: Type) -> Scheme {
     let free_vars1 = t.ftv();
     let free_vars2 = &te.ftv();
-    let mut fv = free_vars1.difference(free_vars2);
+    let fv = free_vars1.difference(free_vars2);
     let mut vec = Vec::new();
     vec.extend(fv.cloned());
     Scheme::Forall(vec, t)
@@ -194,52 +195,51 @@ fn unify(ty1: Type, ty2: Type) -> Subst {
 }
 
 /// The main type inference algorithm. It is described as "algorithm W" in the litterature.
-pub fn infer(ty_env: &mut TypeEnv, e: Expr) -> (Subst, Type) {
+pub fn infer(ty_env: &mut TypeEnv, e: Expr) -> Result<(Subst, Type), &'static str> {
     match e {
         Expr::Ident(i) => {
             match ty_env.0.get_mut(&i) {
                 Some(sc) => {
                     let inst = instantiate(sc);
-                    (Subst::new(), inst)
+                    Ok((Subst::new(), inst))
                 }
                 None => {
-                    println!("unbound var");
-                    (Subst::new(), Type::TypeV("err".to_string()))
+                    Err("unbound var")
                 }
             }
         }
         Expr::Lam(s, e) => {
             let fresh = fresh_var();
             ty_env.0.insert(s, Scheme::Forall(Vec::new(), fresh.clone()));
-            let (s1, e1) = infer(ty_env, *e);
-            (s1.clone(), Type::TArr(Box::new(fresh), Box::new(e1)).apply(&s1))
+            let (s1, e1) = infer(ty_env, *e)?;
+            Ok((s1.clone(), Type::TArr(Box::new(fresh), Box::new(e1)).apply(&s1)))
         }
         Expr::App(e1, e2) => {
             let mut tv = fresh_var();
-            let (mut s1, mut t1) = infer(ty_env, *e1);
-            let (mut s2, mut t2) = infer(&mut ty_env.apply(&s1), *e2);
-            let mut s3 = unify(t1.apply(&s2), Type::TArr(Box::new(t2), Box::new(tv.clone())));
-            let mut tv_p = tv.apply(&s3);
+            let (mut s1, mut t1) = infer(ty_env, *e1)?;
+            let (mut s2, t2) = infer(&mut ty_env.apply(&s1), *e2)?;
+            let s3 = unify(t1.apply(&s2), Type::TArr(Box::new(t2), Box::new(tv.clone())));
+            let tv_p = tv.apply(&s3);
             s2.compose(s3);
             s1.compose(s2);
-            (s1, tv_p)
+            Ok((s1, tv_p))
         }
         Expr::Let(s, e1, e2) => {
-            let (mut s1, mut t1) = infer(ty_env, *e1);
+            let (mut s1, t1) = infer(ty_env, *e1)?;
             let mut env_p = ty_env.apply(&s1);
             env_p.0.insert(s, generalize(&mut (env_p.clone()), t1));
-            let (mut s2, mut t2) = infer(&mut env_p, *e2);
+            let (s2, t2) = infer(&mut env_p, *e2)?;
             s1.compose(s2);
-            (s1, t2)
+            Ok((s1, t2))
         }
-        Expr::IntLit(i) => {
-            (Subst::new(), Type::TCon("int".to_string()))
+        Expr::IntLit(_) => {
+            Ok((Subst::new(), Type::TCon("int".to_string())))
         }
-        Expr::BoolLit(b) => {
-            (Subst::new(), Type::TCon("bool".to_string()))
+        Expr::BoolLit(_) => {
+            Ok((Subst::new(), Type::TCon("bool".to_string())))
         }
         _ => {
-            (Subst::new(), Type::TypeV("err".to_string()))
+            Ok((Subst::new(), Type::TypeV("err".to_string())))
         }
     }
 }

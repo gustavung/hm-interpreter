@@ -31,9 +31,9 @@ fn main() {
 
     println!("{:?}", e);
 
-    let (subs, ty) = infer(&mut TypeEnv::new(), e);
-
-    println!("type: {:?}", ty);
-    println!("subs: {:?}", subs);
+    match infer(&mut TypeEnv::new(), e) {
+        Ok((_, ty)) => println!("type: {:?}", ty),
+        Err(s) => println!("type: {:?}", s)
+    }
 
 }

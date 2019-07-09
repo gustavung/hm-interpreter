@@ -1,4 +1,4 @@
-use nom::character::complete::{digit1, multispace0, multispace1, alphanumeric1};
+use nom::character::complete::{digit1, multispace1, alphanumeric1};
 
 #[derive(Debug)]
 pub enum Expr {
@@ -15,7 +15,6 @@ pub enum Expr {
     If(Box<Expr>, Box<Expr>, Box<Expr>)
 }
 
-use crate::NOM_TRACE;
 
 named!(comment(&str) -> &str, preceded!(
         tag!("//"),

@@ -156,9 +156,9 @@ fn fresh_var() -> Type {
 
 /// An implementation of the generalization rule described in the papers above.
 fn generalize(te: &mut TypeEnv, mut t: Type) -> Scheme {
-    let free_vars1 = t.ftv();
-    let free_vars2 = &te.ftv();
-    let fv = free_vars1.difference(free_vars2);
+    let free_var1 = t.ftv();
+    let free_var2 = &te.ftv();
+    let fv = free_var1.difference(free_var2);
     let mut vec = Vec::new();
     vec.extend(fv.cloned());
     Scheme::Forall(vec, t)
@@ -166,13 +166,13 @@ fn generalize(te: &mut TypeEnv, mut t: Type) -> Scheme {
 
 /// An implementation of the instantiation rule described in the papers above.
 fn instantiate(s: &mut Scheme) -> Type {
-    if let Scheme::Forall(v, t) = s {
-        let mut subst = Subst::new();
-        v.iter().map(|st| subst.0.insert(st.to_string(), fresh_var()));
-        return t.apply(&subst)
-    }
-    // else error
-    Type::TCon("a".to_string())
+    let Scheme::Forall(v, t) = s;
+    let mut subst = Subst::new();
+    v.iter().for_each(|st| {
+        subst.0.insert(st.to_string(), fresh_var());
+        ()
+    });
+    t.apply(&subst)
 }
 
 // TODO: Implement occurschecking below

@@ -62,8 +62,9 @@ impl Subst {
         }
     }
 
-    fn compose(&mut self, mut m: Subst) {
+    fn compose(mut self, mut m: Subst) -> Subst {
         self.0.extend(m.0.drain());
+        self
     }
 }
 
@@ -185,7 +186,8 @@ fn unify(ty1: Type, ty2: Type) -> Subst {
     } else if let Type::TArr(a1, mut a2) = ty1 {
         if let Type::TArr(b1, mut b2) = ty2 {
             sub = unify(*a1, *b1);
-            sub.compose(unify(a2.apply(&sub), b2.apply(&sub)));
+            let s1 = unify(a2.apply(&sub), b2.apply(&sub));
+            sub = sub.compose(s1);
         } else {
             // throw error in future
         }
@@ -227,56 +229,55 @@ pub fn infer(mut ty_env: &mut TypeEnv, e: Expr) -> Result<(Subst, Type), &'stati
             let mut tv = fresh_var();
             let (mut s1, mut t1) = infer(ty_env, *e1)?;
             *ty_env = ty_env.apply(&s1);
-            let (mut s2, t2) = infer(&mut ty_env, *e2)?;
+            let (s2, t2) = infer(&mut ty_env, *e2)?;
             let s3 = unify(t1.apply(&s2), Type::TArr(Box::new(t2), Box::new(tv.clone())));
             let tv_p = tv.apply(&s3);
-            s2.compose(s3);
-            s1.compose(s2);
+            s1 = s1.compose(s2)
+                   .compose(s3);
             Ok((s1, tv_p))
         }
         Expr::Let(s, e1, e2) => {
-            let (mut s1, t1) = infer(ty_env, *e1)?;
+            let (s1, t1) = infer(ty_env, *e1)?;
             let mut env_p = ty_env.apply(&s1);
             env_p.0.insert(s, generalize(&mut (env_p.clone()), t1));
             let (s2, t2) = infer(&mut env_p, *e2)?;
-            s1.compose(s2);
-            Ok((s1, t2))
+            Ok((s1.compose(s2), t2))
         }
         Expr::If(cond, e2, e3) => {
             let (mut s1, t1) = infer(ty_env, *cond)?;
-            let (mut s2, mut t2) = infer(ty_env, *e2)?;
-            let (mut s3, t3) = infer(ty_env, *e3)?;
+            let (s2, mut t2) = infer(ty_env, *e2)?;
+            let (s3, t3) = infer(ty_env, *e3)?;
             // cond must be of boolean type
-            let mut s4 = unify(t1, Type::TCon("bool".to_string()));
+            let s4 = unify(t1, Type::TCon("bool".to_string()));
             // e2 and e3 must be of same type
             let s5 = unify(t2.clone(), t3);
-            s4.compose(s5.clone());
-            s3.compose(s4);
-            s2.compose(s3);
-            s1.compose(s2);
+            s1 = s1.compose(s2)
+              .compose(s3)
+              .compose(s4)
+              .compose(s5.clone());
             Ok((s1, t2.apply(&s5)))
         }
         Expr::Add(e1, e2) => {
-            let (s1, t1) = infer(ty_env, *e1)?;
-            let (mut s2, t2) = infer(ty_env, *e2)?;
+            let (mut s1, t1) = infer(ty_env, *e1)?;
+            let (s2, t2) = infer(ty_env, *e2)?;
             let mut tv = fresh_var();
-            let mut s3 = unify(Type::TArr(Box::new(t1), Box::new(Type::TArr(Box::new(t2), Box::new(tv.clone())))),
+            let s3 = unify(Type::TArr(Box::new(t1), Box::new(Type::TArr(Box::new(t2), Box::new(tv.clone())))),
                            Type::TArr(Box::new(Type::TCon("int".to_string())), Box::new(Type::TArr(Box::new(Type::TCon("int".to_string())), Box::new(Type::TCon("int".to_string()))))));
-            s2.compose(s1);
-            s3.compose(s2);
-            Ok((s3.clone(), tv.apply(&s3)))
+            s1 = s1.compose(s2)
+              .compose(s3);
+            Ok((s1.clone(), tv.apply(&s1)))
         }
         Expr::Comp(e1, e2) => {
-            let (s1, t1) = infer(ty_env, *e1)?;
-            let (mut s2, t2) = infer(ty_env, *e2)?;
+            let (mut s1, t1) = infer(ty_env, *e1)?;
+            let (s2, t2) = infer(ty_env, *e2)?;
             let mut tv = fresh_var();
-            let mut s3 = unify(Type::TArr(Box::new(t1), Box::new(Type::TArr(Box::new(t2), Box::new(tv.clone())))),
-                           Type::TArr(Box::new(Type::TCon("int".to_string())), Box::new(Type::TArr(Box::new(Type::TCon("int".to_string())), Box::new(Type::TCon("bool".to_string()))))));
-            s2.compose(s1);
-            s3.compose(s2);
-            Ok((s3.clone(), tv.apply(&s3)))
+            let s3 = unify(Type::TArr(Box::new(t1), Box::new(Type::TArr(Box::new(t2), Box::new(tv.clone())))),
+                           Type::TArr(Box::new(Type::TCon("int".to_string())), Box::new(Type::TArr(Box::new(Type::TCon("int".to_string())), Box::new(Type::TCon("int".to_string()))))));
+            s1 = s1.compose(s2)
+              .compose(s3);
+            Ok((s1.clone(), tv.apply(&s1)))
         }
-        Expr::MinLit(e) => {
+        Expr::MinLit(_) => {
             Ok((Subst::new(), Type::TCon("int".to_string())))
         }
         Expr::IntLit(_) => {

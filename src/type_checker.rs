@@ -16,7 +16,7 @@ use crate::parser::Expr;
 type Var = String;
 
 /// A type is defined as a type variable, a type const (eg. bool, int etc) or a arrow type.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     // type variable
     TypeV(Var),
@@ -67,12 +67,10 @@ impl Subst {
     }
 }
 
-//let typeInt: Type = Type::TCon(String::from("Int"));
-//let typeBool: Type = Type::TCon(String::from("Bool"));
-
 /// This trait defines what is required to be able to substitute type variables in the implementor.
 trait Substitutable<T> {
     /// Given a substitution map, apply the substitutions
+    // We can only guarantee that the return value is correct, self need not be intact after apply
     fn apply(&mut self, sub: &Subst) -> T;
     /// return the set of free type variables
     fn ftv(&mut self) -> BTreeSet<Var>;
@@ -206,7 +204,7 @@ fn var_subst(v: Var, mut t: Type, s: &mut Subst) {
 }
 
 /// The main type inference algorithm. It is described as "algorithm W" in the litterature.
-pub fn infer(ty_env: &mut TypeEnv, e: Expr) -> Result<(Subst, Type), &'static str> {
+pub fn infer(mut ty_env: &mut TypeEnv, e: Expr) -> Result<(Subst, Type), &'static str> {
     match e {
         Expr::Ident(i) => {
             match ty_env.0.get_mut(&i) {
@@ -228,7 +226,8 @@ pub fn infer(ty_env: &mut TypeEnv, e: Expr) -> Result<(Subst, Type), &'static st
         Expr::App(e1, e2) => {
             let mut tv = fresh_var();
             let (mut s1, mut t1) = infer(ty_env, *e1)?;
-            let (mut s2, t2) = infer(&mut ty_env.apply(&s1), *e2)?;
+            *ty_env = ty_env.apply(&s1);
+            let (mut s2, t2) = infer(&mut ty_env, *e2)?;
             let s3 = unify(t1.apply(&s2), Type::TArr(Box::new(t2), Box::new(tv.clone())));
             let tv_p = tv.apply(&s3);
             s2.compose(s3);
@@ -243,6 +242,43 @@ pub fn infer(ty_env: &mut TypeEnv, e: Expr) -> Result<(Subst, Type), &'static st
             s1.compose(s2);
             Ok((s1, t2))
         }
+        Expr::If(cond, e2, e3) => {
+            let (mut s1, t1) = infer(ty_env, *cond)?;
+            let (mut s2, mut t2) = infer(ty_env, *e2)?;
+            let (mut s3, t3) = infer(ty_env, *e3)?;
+            // cond must be of boolean type
+            let mut s4 = unify(t1, Type::TCon("bool".to_string()));
+            // e2 and e3 must be of same type
+            let s5 = unify(t2.clone(), t3);
+            s4.compose(s5.clone());
+            s3.compose(s4);
+            s2.compose(s3);
+            s1.compose(s2);
+            Ok((s1, t2.apply(&s5)))
+        }
+        Expr::Add(e1, e2) => {
+            let (s1, t1) = infer(ty_env, *e1)?;
+            let (mut s2, t2) = infer(ty_env, *e2)?;
+            let mut tv = fresh_var();
+            let mut s3 = unify(Type::TArr(Box::new(t1), Box::new(Type::TArr(Box::new(t2), Box::new(tv.clone())))),
+                           Type::TArr(Box::new(Type::TCon("int".to_string())), Box::new(Type::TArr(Box::new(Type::TCon("int".to_string())), Box::new(Type::TCon("int".to_string()))))));
+            s2.compose(s1);
+            s3.compose(s2);
+            Ok((s3.clone(), tv.apply(&s3)))
+        }
+        Expr::Comp(e1, e2) => {
+            let (s1, t1) = infer(ty_env, *e1)?;
+            let (mut s2, t2) = infer(ty_env, *e2)?;
+            let mut tv = fresh_var();
+            let mut s3 = unify(Type::TArr(Box::new(t1), Box::new(Type::TArr(Box::new(t2), Box::new(tv.clone())))),
+                           Type::TArr(Box::new(Type::TCon("int".to_string())), Box::new(Type::TArr(Box::new(Type::TCon("int".to_string())), Box::new(Type::TCon("bool".to_string()))))));
+            s2.compose(s1);
+            s3.compose(s2);
+            Ok((s3.clone(), tv.apply(&s3)))
+        }
+        Expr::MinLit(e) => {
+            Ok((Subst::new(), Type::TCon("int".to_string())))
+        }
         Expr::IntLit(_) => {
             Ok((Subst::new(), Type::TCon("int".to_string())))
         }
@@ -250,7 +286,7 @@ pub fn infer(ty_env: &mut TypeEnv, e: Expr) -> Result<(Subst, Type), &'static st
             Ok((Subst::new(), Type::TCon("bool".to_string())))
         }
         _ => {
-            Ok((Subst::new(), Type::TypeV("Faulty expression in type inference".to_string())))
+            Err("Faulty expression in type inference")
         }
     }
 }

@@ -145,8 +145,9 @@ impl Substitutable<TypeEnv> for TypeEnv {
 }
 
 /// A check intended to prevent cyclic type variables and therefore infinite types.
-fn occurs_check<T: Substitutable<T>>(v: Var, t: &mut T) -> bool {
-    t.ftv().contains(&v)
+fn occurs_check<T: Substitutable<T>>(v: &Var, t: &mut T) -> bool {
+    // do we really need clone here?
+    t.ftv().contains(&v.clone())
 }
 
 /// This function will generate a new, fresh type variable.
@@ -175,23 +176,33 @@ fn instantiate(s: &mut Scheme) -> Type {
     t.apply(&subst)
 }
 
-// TODO: Implement occurschecking below
+// TODO: implement error handling
 /// This function will try to compute a substituation such that ty1 == ty2.apply(subs) is true.
 fn unify(ty1: Type, ty2: Type) -> Subst {
     let mut sub = Subst::new();
     if let Type::TypeV(s) = ty1 {
-        sub.0.insert(s, ty2);
+        var_subst(s, ty2, &mut sub);
     } else if let Type::TypeV(s) = ty2 {
-        sub.0.insert(s, ty1);
+        var_subst(s, ty1, &mut sub);
     } else if let Type::TArr(a1, mut a2) = ty1 {
         if let Type::TArr(b1, mut b2) = ty2 {
             sub = unify(*a1, *b1);
             sub.compose(unify(a2.apply(&sub), b2.apply(&sub)));
+        } else {
+            // throw error in future
         }
     } else {
         // something went wrong
     }
     sub
+}
+
+fn var_subst(v: Var, mut t: Type, s: &mut Subst) {
+    if occurs_check(&v, &mut t) {
+        //throw error
+    } else {
+        s.0.insert(v, t);
+    }
 }
 
 /// The main type inference algorithm. It is described as "algorithm W" in the litterature.
@@ -204,7 +215,7 @@ pub fn infer(ty_env: &mut TypeEnv, e: Expr) -> Result<(Subst, Type), &'static st
                     Ok((Subst::new(), inst))
                 }
                 None => {
-                    Err("unbound var")
+                    Err("Unbound var")
                 }
             }
         }
@@ -239,7 +250,7 @@ pub fn infer(ty_env: &mut TypeEnv, e: Expr) -> Result<(Subst, Type), &'static st
             Ok((Subst::new(), Type::TCon("bool".to_string())))
         }
         _ => {
-            Ok((Subst::new(), Type::TypeV("err".to_string())))
+            Ok((Subst::new(), Type::TypeV("Faulty expression in type inference".to_string())))
         }
     }
 }
